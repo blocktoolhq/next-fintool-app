@@ -4,6 +4,8 @@ import { useChat } from "@/hooks/use-chat";
 import { useState } from "react";
 import { nanoid } from "nanoid";
 import { isAssistantMessage } from "@/utils/message";
+import { StrongOrCitationBubble } from "@/components/strong-or-citation-bubble";
+import ReactMarkdown from "react-markdown";
 
 export default function Chat() {
   const conversationId = 'conversation-123';
@@ -67,7 +69,23 @@ export default function Chat() {
                   ))}
                 </div>
               )}
-              <div>{m.content}</div>
+              <div className="whitespace-pre-wrap">
+                <ReactMarkdown
+                  components={{
+                    strong({ children, ...props }) {
+                      return (
+                        <StrongOrCitationBubble
+                          {...props}
+                        >
+                          {children}
+                        </StrongOrCitationBubble>
+                      );
+                    },
+                  }}
+                >
+                  {m.content}
+                </ReactMarkdown>
+              </div>
             </>
           )}
         </div>
