@@ -21,7 +21,7 @@ type AssistantMessage = {
   mode: 'chat';
   content: string;
   gpt_history: { [key: string]: string };
-  thinking_steps?: { title: string, content: string }[];
+  thinking_steps?: { title: string, content: string | null; search_content: { query: string, status: string }[] | null; status: string; }[];
 }
 
 function isAssistantMessage(m: any): m is AssistantMessage {
@@ -30,7 +30,12 @@ function isAssistantMessage(m: any): m is AssistantMessage {
     content: z.string(),
     thinking_steps: z.array(z.object({
       title: z.string(),
-      content: z.string(),
+      content: z.string().nullable(),
+      search_content: z.array(z.object({
+        query: z.string(),
+        status: z.string(),
+      })).nullable(),
+      status: z.string(),
     })).optional(),
     gpt_history: z.record(z.string()),
   }).safeParse(m).success;
