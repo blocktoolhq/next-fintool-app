@@ -13,26 +13,31 @@ import Image from "next/image";
 import remarkGfm from "remark-gfm";
 
 // Collapsible thinking component
-const ThinkingSteps = ({ thinking, isLatest, isComplete }: { 
+const ThinkingSteps = ({ thinking, isLatest, isComplete, hasContent }: { 
   thinking: string; 
   isLatest?: boolean; 
   isComplete?: boolean;
+  hasContent?: boolean;
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
   const steps = thinking.split('\n').filter(Boolean);
   const latestStep = steps[steps.length - 1]?.trim() || 'Thinking...';
   
-  // Auto-expand latest message for 3 seconds
+  // Auto-expand latest message and collapse when content appears
   useEffect(() => {
     if (isLatest && thinking && !isComplete) {
       setIsExpanded(true);
-      const timer = setTimeout(() => {
-        setIsExpanded(false);
-      }, 3000);
-      return () => clearTimeout(timer);
+      
+      // Only collapse when content starts showing up
+      if (hasContent) {
+        const timer = setTimeout(() => {
+          setIsExpanded(false);
+        }, 1000); // Brief delay to let user see content starting
+        return () => clearTimeout(timer);
+      }
     }
-  }, [isLatest, thinking, isComplete]);
+  }, [isLatest, thinking, isComplete, hasContent]);
   
   if (!thinking) return null;
 
@@ -181,6 +186,7 @@ export default function Chat() {
   const conversationId = 'conversation-123';
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const {
     error,
     isLoading,
@@ -192,6 +198,11 @@ export default function Chat() {
     initialMessages: [],
   });
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
   }, []);
@@ -200,14 +211,20 @@ export default function Chat() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
+    const userInput = input;
+    setInput('');
+
     await append({
       id: nanoid(),
       role: 'user',
-      content: input,
+      content: userInput,
       metadata: {}
     });
 
-    setInput('');
+    // Scroll to bottom after submitting
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   }, [input, isLoading, append]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -278,6 +295,7 @@ export default function Chat() {
                                 thinking={m.thinking} 
                                 isLatest={m.id === messages[messages.length - 1].id} 
                                 isComplete={!!m.metadata.session_data || (!isLoading || m.id !== messages[messages.length - 1].id)}
+                                hasContent={!!m.content && m.content.trim().length > 0}
                               />
                             )}
                             <div className="prose prose-sm max-w-none">
@@ -291,7 +309,7 @@ export default function Chat() {
                                       </StrongOrCitationBubble>
                                     );
                                   },
-                                  p: ({ children }) => <p className="mb-3">{children}</p>,
+                                  p: ({ children }) => <div className="mb-3">{children}</div>,
                                   ul: ({ children }) => <ul className="mb-3 pl-6">{children}</ul>,
                                   ol: ({ children }) => <ol className="mb-3 pl-6">{children}</ol>,
                                   li: ({ children }) => <li className="mb-1">{children}</li>,
@@ -330,6 +348,9 @@ export default function Chat() {
                       </div>
                     </div>
                   )}
+                  
+                  {/* Scroll target */}
+                  <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
             </div>
