@@ -4,21 +4,72 @@ import { nanoid } from "nanoid";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { callGeneralChatApi } from "@/utils/chat-api";
 
-function asMessage(id: string, m: StreamingChatResponse): IAssistantMessage {
+// Utility functions to reduce redundancy
+function transformChatMessageToBaseMessage(message: ChatMessage): BaseMessage {
+  if (isUserMessage(message)) {
+    return {
+      content: message.content,
+      role: message.role,
+    };
+  } else if (isAssistantMessage(message)) {
+    return {
+      content: message.content,
+      role: 'assistant',
+      metadata: {
+        session_data: message.metadata.session_data || '',
+      }
+    };
+  } else {
+    throw new Error(`Unknown message type: ${JSON.stringify(message)}`);
+  }
+}
+
+function transformStreamingResponseToAssistantMessage(id: string, response: StreamingChatResponse): IAssistantMessage {
   return {
     id,
     role: 'assistant',
-    content: m.content || '',
-    thinking: m.thinking || '',
+    content: response.content || '',
+    thinking: response.thinking || '',
     metadata: {
-      session_data: m.metadata?.session_data || '',
+      session_data: response.metadata?.session_data || '',
     }
-  }
+  };
+}
+
+function createEmptyAssistantMessage(id: string): IAssistantMessage {
+  return {
+    id,
+    role: "assistant",
+    content: '',
+    thinking: '',
+    metadata: {
+      session_data: '',
+    }
+  };
+}
+
+function trimMessagesToLastExchanges(messages: BaseMessage[], keepLastNMessages: number): BaseMessage[] {
+  return messages.slice(-(2 * keepLastNMessages + 1));
+}
+
+function createRequestBody(requestMessages: BaseMessage[]) {
+  return {
+    request: {
+      messages: requestMessages,
+      stream: true,
+    },
+    endpoint: 'v2/chat',
+  };
+}
+
+function isAbortError(error: any): boolean {
+  return error?.name === 'AbortError';
 }
 
 type UseChatOptions = {
   id: string;               // conversation_id
   initialMessages?: ChatMessage[];
+  onStreamEvent?: (type: 'request' | 'response_chunk' | 'error', data: any) => void;
 };
 
 type UseChatHelpers = {
@@ -30,16 +81,22 @@ type UseChatHelpers = {
   isLoading: boolean;
 };
 
-export function useChat({ id, initialMessages }: UseChatOptions): UseChatHelpers {
+export function useChat({ id, initialMessages, onStreamEvent }: UseChatOptions): UseChatHelpers {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages || []);
   const messagesRef = useRef<ChatMessage[]>(messages);
+  const [isLoading, setLoading] = useState(false);
+  const [error, setError] = useState<undefined | Error>(undefined);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Keep messages ref in sync
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
-  const [isLoading, setLoading] = useState(false);
-  const [error, setError] = useState<undefined | Error>(undefined);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Clean up error when conversation changes
+  useEffect(() => {
+    setError(undefined);
+  }, [id]);
 
   const stop = useCallback(() => {
     if (abortControllerRef.current) {
@@ -49,104 +106,74 @@ export function useChat({ id, initialMessages }: UseChatOptions): UseChatHelpers
   }, []);
 
   const append = useCallback(async (userMessage: IUserMessage, keepLastNMessages = 3, useCaching = false) => {
-
     const previousMessages = messagesRef.current;
     const withUserMessage = [...previousMessages, userMessage];
-
-    // Set only the user message initially
-    setMessages(withUserMessage);
-
-    setLoading(true);
-    setError(undefined);
     const roundId = nanoid();
 
+    // Set user message immediately
+    setMessages(withUserMessage);
+    setLoading(true);
+    setError(undefined);
+
     try {
-      // Create basic message structure according to FinTool API spec
-      let requestMessages: BaseMessage[] = withUserMessage
-        .map(m => {
-          if (isUserMessage(m)) {
-            return {
-              content: m.content,
-              role: m.role,
-            };
-          } else if (isAssistantMessage(m)) {
-            return {
-              content: m.content,
-              role: 'assistant',
-              metadata: {
-                session_data: m.metadata.session_data || '',
-              }
-            };
-          } else {
-            console.log("Unknown message type: ", m);
-            throw new Error(`Unknown message type: ${m}`);
-          }
-        });
+      // Transform messages for API request
+      const requestMessages = trimMessagesToLastExchanges(
+        withUserMessage.map(transformChatMessageToBaseMessage),
+        keepLastNMessages
+      );
 
-      // Keep only the last N message exchanges
-      requestMessages = requestMessages.slice(-(2 * keepLastNMessages + 1));
+      // Log the request for debugging
+      const actualRequestBody = createRequestBody(requestMessages);
+      onStreamEvent?.('request', {
+        url: '/api/chat',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: actualRequestBody
+      });
 
-      const chatRequest: GeneralChatRequest = {
-        messages: requestMessages,
-        stream: true,
-      };
-
-      let assistantMessage: IAssistantMessage = {
-        id: roundId,
-        role: "assistant",
-        content: '',
-        thinking: '',
-        metadata: {
-          session_data: '',
-        }
-      };
-
+      // Create abort controller
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
+      // Call API with streaming
       const state = await callGeneralChatApi({
-        request: chatRequest,
-        headers: {
-          'X-Conversation-ID': id,
-          'X-Round-ID': roundId,
+        request: {
+          messages: requestMessages,
+          stream: true,
         },
+        headers: {},
         abortController: () => abortControllerRef.current!,
         onUpdate: (newState: Partial<StreamingChatResponse>) => {
-          const _newMessage = asMessage(roundId, {
+          const updatedMessage = transformStreamingResponseToAssistantMessage(roundId, {
             thinking: newState.thinking || '',
             content: newState.content || '',
             metadata: newState.metadata,
           });
-          setMessages([
-            ...withUserMessage,
-            _newMessage,
-          ]);
+          setMessages([...withUserMessage, updatedMessage]);
+        },
+        onRawSSE: (rawLines: string) => {
+          onStreamEvent?.('response_chunk', rawLines);
         },
         onComplete: () => {
-          // Message is complete when session_data is received
           setLoading(false);
         },
       });
 
-      assistantMessage = asMessage(roundId, state) as IAssistantMessage;
-
-      const newMessages = [...withUserMessage, assistantMessage];
-      setMessages(newMessages);
+      // Set final message state
+      const finalMessage = transformStreamingResponseToAssistantMessage(roundId, state);
+      setMessages([...withUserMessage, finalMessage]);
 
     } catch (err) {
-      if ((err as any).name === 'AbortError') {
+      if (isAbortError(err)) {
         abortControllerRef.current = null;
       } else {
         console.error('Error in chat:', err);
+        onStreamEvent?.('error', err);
         setError(err as Error);
       }
       setLoading(false);
     }
-  }, [id]);
-
-  useEffect(() => {
-    setError(undefined);
-  }, [id]);
+  }, [id, onStreamEvent]);
 
   return {
     messages,
