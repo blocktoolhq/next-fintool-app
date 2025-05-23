@@ -46,6 +46,7 @@ export interface StreamingChatResponse {
   };
 }
 
+// Utility functions to reduce redundancy
 function parseSSEEvent(line: string): SSEEvent | null {
   const eventMatch = line.match(/^event:\s*(.+)$/);
   const dataMatch = line.match(/^data:\s*(.+)$/);
@@ -68,20 +69,25 @@ function parseFinToolAPIResponse(data: string): FinToolAPIResponse | null {
   }
 }
 
-export async function callGeneralChatApi({
-  request,
-  headers = {},
-  abortController,
-  onUpdate,
-  onComplete,
-}: {
-  request: GeneralChatRequest;
-  headers?: HeadersInit;
-  abortController: () => AbortController;
-  onUpdate: (state: Partial<StreamingChatResponse>) => void;
-  onComplete?: () => void;
-}): Promise<StreamingChatResponse> {
-  const response = await fetch('/api/chat', {
+// Centralized error handling
+function handleAPIError(response: Response): Promise<never> {
+  return response.text().then(errStr => {
+    throw new Error(errStr || 'Failed to fetch the chat response.');
+  });
+}
+
+// Centralized response processing
+function processAPIResponse(parsedResponse: FinToolAPIResponse): StreamingChatResponse {
+  return {
+    thinking: parsedResponse.message.thinking || '',
+    content: parsedResponse.message.content,
+    metadata: parsedResponse.message.metadata,
+  };
+}
+
+// Centralized fetch configuration
+function createFetchConfig(request: GeneralChatRequest, headers: HeadersInit, signal: AbortSignal) {
+  return {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -91,31 +97,44 @@ export async function callGeneralChatApi({
       request,
       endpoint: 'v2/chat',
     }),
-    signal: abortController().signal,
-  });
+    signal,
+  };
+}
+
+export async function callGeneralChatApi({
+  request,
+  headers = {},
+  abortController,
+  onUpdate,
+  onComplete,
+  onRawUpdate,
+  onRawSSE,
+}: {
+  request: GeneralChatRequest;
+  headers?: HeadersInit;
+  abortController: () => AbortController;
+  onUpdate: (state: Partial<StreamingChatResponse>) => void;
+  onComplete?: () => void;
+  onRawUpdate?: (rawData: string) => void;
+  onRawSSE?: (rawLines: string) => void;
+}): Promise<StreamingChatResponse> {
+  const controller = abortController();
+  const response = await fetch('/api/chat', createFetchConfig(request, headers, controller.signal));
 
   if (!response.ok) {
-    const errStr = await response.text();
-    throw new Error(errStr || 'Failed to fetch the chat response.');
+    return handleAPIError(response);
   }
 
   if (request.stream !== false) {
-    // Handle streaming response
-    return await handleStreamingResponse(response, abortController, onUpdate, onComplete);
+    return await handleStreamingResponse(response, abortController, onUpdate, onComplete, onRawUpdate, onRawSSE);
   } else {
-    // Handle non-streaming response
     const data = await response.json();
     const parsedResponse = parseFinToolAPIResponse(JSON.stringify(data));
     if (!parsedResponse) {
       throw new Error('Invalid API response format');
     }
     
-    const result: StreamingChatResponse = {
-      thinking: parsedResponse.message.thinking || '',
-      content: parsedResponse.message.content,
-      metadata: parsedResponse.message.metadata,
-    };
-    
+    const result = processAPIResponse(parsedResponse);
     onUpdate(result);
     onComplete?.();
     return result;
@@ -126,7 +145,9 @@ async function handleStreamingResponse(
   response: Response,
   abortController: () => AbortController,
   onUpdate: (state: Partial<StreamingChatResponse>) => void,
-  onComplete?: () => void
+  onComplete?: () => void,
+  onRawUpdate?: (rawData: string) => void,
+  onRawSSE?: (rawLines: string) => void
 ): Promise<StreamingChatResponse> {
   if (!response.body) {
     throw new Error('No response body for streaming');
@@ -142,11 +163,38 @@ async function handleStreamingResponse(
   };
   let isComplete = false;
 
+  const processEvent = (currentData: string, sseLines: string[]) => {
+    onRawSSE?.(sseLines.join('\n'));
+    onRawUpdate?.(currentData);
+    
+    const parsedResponse = parseFinToolAPIResponse(currentData);
+    if (parsedResponse) {
+      currentState = {
+        thinking: parsedResponse.message.thinking || currentState.thinking,
+        content: parsedResponse.message.content || currentState.content,
+        metadata: parsedResponse.message.metadata || currentState.metadata,
+      };
+      onUpdate(currentState);
+      
+      // Check if we received session_data - this indicates message completion
+      if (parsedResponse.message.metadata?.session_data) {
+        isComplete = true;
+        onComplete?.();
+        return true;
+      }
+    }
+    return false;
+  };
+
   try {
     while (!isComplete) {
       const { done, value } = await reader.read();
       
-      if (done) break;
+      if (done) {
+        isComplete = true;
+        onComplete?.();
+        break;
+      }
       
       buffer += decoder.decode(value, { stream: true });
       
@@ -156,6 +204,7 @@ async function handleStreamingResponse(
       
       let currentEvent = '';
       let currentData = '';
+      let sseLines: string[] = [];
       
       for (const line of lines) {
         const trimmedLine = line.trim();
@@ -163,27 +212,18 @@ async function handleStreamingResponse(
         if (trimmedLine === '') {
           // Empty line signals end of event
           if (currentEvent === 'message' && currentData) {
-            const parsedResponse = parseFinToolAPIResponse(currentData);
-            if (parsedResponse) {
-              currentState = {
-                thinking: parsedResponse.message.thinking || currentState.thinking,
-                content: parsedResponse.message.content || currentState.content,
-                metadata: parsedResponse.message.metadata || currentState.metadata,
-              };
-              onUpdate(currentState);
-              
-              // Check if we received session_data - this indicates message completion
-              if (parsedResponse.message.metadata?.session_data) {
-                isComplete = true;
-                onComplete?.();
-                break;
-              }
+            if (processEvent(currentData, sseLines)) {
+              break;
             }
           }
           currentEvent = '';
           currentData = '';
+          sseLines = [];
           continue;
         }
+        
+        // Collect raw SSE lines
+        sseLines.push(trimmedLine);
         
         const sseEvent = parseSSEEvent(trimmedLine);
         if (sseEvent) {
