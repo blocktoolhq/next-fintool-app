@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "nanoid": "^5.1.5",
     "next": "latest",
     "openai": "^4.94.0",
     "react": "^18",
