@@ -55,7 +55,19 @@ const ThinkingSteps = ({ thinking, isLatest, isComplete, hasContent }: {
           <ChevronRight className="w-3 h-3 shrink-0" />
         )}
         <Brain className="w-5 h-5" />
-        <span className="text-base">
+        <span 
+          className={`text-base ${isLatest && !isComplete && !hasContent ? 'text-transparent' : ''}`}
+          style={{
+            ...(isLatest && !isComplete && !hasContent ? {
+              backgroundImage: 'linear-gradient(to right, #9CA3AF 0%, #9CA3AF 40%, #111827 50%, #9CA3AF 60%, #9CA3AF 100%)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              color: 'transparent',
+              backgroundSize: '200% 100%',
+              animation: 'slide 3s linear infinite',
+            } : {})
+          }}
+        >
           {displayText}
         </span>
       </button>
@@ -76,6 +88,17 @@ const ThinkingSteps = ({ thinking, isLatest, isComplete, hasContent }: {
           ))}
         </div>
       )}
+      
+      <style jsx>{`
+        @keyframes slide {
+          0% {
+            background-position: 120% 50%;
+          }
+          100% {
+            background-position: -20% 50%;
+          }
+        }
+      `}</style>
     </div>
   );
 };
