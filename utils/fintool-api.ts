@@ -11,14 +11,17 @@ type RequestOptions = {
 
 export async function doRequest({ method, path, body, headers, signal }: RequestOptions): Promise<Response> {
   const url = `${FINTOOL_HOST}/${path}`;
+  
   const resp = await fetch(url, {
     method,
     headers: {
       'Authorization': `Bearer ${FINTOOL_API_KEY}`,
+      'Connection': 'keep-alive',
       ...headers,
     },
     body,
     signal,
   });
+  
   return resp;
 }

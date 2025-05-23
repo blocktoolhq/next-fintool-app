@@ -3,7 +3,7 @@ import { doRequest } from "@/utils/fintool-api";
 export const maxDuration = 300;
 export const runtime = "edge";
 
-async function createChatStream(headers: Record<string, string>, endpoint: string, body: any, controller: AbortController): Promise<ReadableStream<any>> {
+async function createChatStream(headers: Record<string, string>, endpoint: string, body: any): Promise<ReadableStream<any>> {
   const response = await doRequest({
     body: JSON.stringify(body),
     method: 'POST',
@@ -12,7 +12,6 @@ async function createChatStream(headers: Record<string, string>, endpoint: strin
       ...headers,
       'Content-Type': 'application/json',
     },
-    signal: controller.signal,
   });
 
   if (!response.ok) {
@@ -39,36 +38,28 @@ async function createChatStream(headers: Record<string, string>, endpoint: strin
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const { request, endpoint } = await req.json();
-
-  // Prepare payload for the backend - pass through the exact format expected by FinTool API
-  const backendPayload = {
-    messages: request.messages,
-    stream: request.stream !== false, // Default to true for streaming
-  };
-
-  const headersObject: Record<string, string> = {};
-
-  // Get conversation headers from the request
-  const requestHeaders = new Headers(req.headers);
-  for (const key of ['X-Conversation-ID', 'X-Round-ID']) {
-    const value = requestHeaders.get(key);
-    if (value) {
-      headersObject[key] = value;
-    }
-  }
-
-  const controller = new AbortController();
-
-  // Handle request abort
-  req.signal.addEventListener('abort', () => {
-    controller.abort();
-  });
-
   try {
-    const stream = await createChatStream(headersObject, endpoint, backendPayload, controller);
+    const { request, endpoint } = await req.json();
+
+    // Prepare payload for the backend
+    const backendPayload = {
+      messages: request.messages,
+      stream: request.stream !== false,
+    };
+
+    const headersObject: Record<string, string> = {};
+
+    // Get conversation headers from the request
+    const requestHeaders = new Headers(req.headers);
+    for (const key of ['X-Conversation-ID', 'X-Round-ID']) {
+      const value = requestHeaders.get(key);
+      if (value) {
+        headersObject[key] = value;
+      }
+    }
+
+    const stream = await createChatStream(headersObject, endpoint, backendPayload);
     
-    // Return appropriate headers for SSE
     return new Response(stream, {
       headers: {
         'Content-Type': backendPayload.stream ? 'text/plain; charset=utf-8' : 'application/json',
@@ -79,8 +70,8 @@ export async function POST(req: Request): Promise<Response> {
         })
       }
     });
-  } catch (e) {
-    console.error(e);
+  } catch (error: any) {
+    console.error('Chat API error:', error);
     return new Response('Failed to fetch the chat response.', { status: 500 });
   }
 }

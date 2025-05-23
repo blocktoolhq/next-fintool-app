@@ -18,22 +18,9 @@ const ThinkingSteps = ({ thinking, isLatest, isComplete }: {
   isComplete?: boolean;
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [thinkingDuration, setThinkingDuration] = useState<number | null>(null);
-  const [startTime, setStartTime] = useState<number | null>(null);
   
   const steps = thinking.split('\n').filter(Boolean);
   const latestStep = steps[steps.length - 1]?.trim() || 'Thinking...';
-  
-  // Track thinking duration
-  useEffect(() => {
-    if (thinking && !startTime) {
-      setStartTime(Date.now());
-    }
-    if (isComplete && startTime && !thinkingDuration) {
-      const duration = Math.round((Date.now() - startTime) / 1000);
-      setThinkingDuration(duration);
-    }
-  }, [thinking, isComplete, startTime, thinkingDuration]);
   
   // Auto-expand latest message for 3 seconds
   useEffect(() => {
@@ -48,8 +35,8 @@ const ThinkingSteps = ({ thinking, isLatest, isComplete }: {
   
   if (!thinking) return null;
 
-  // Show duration for completed messages
-  if (isComplete && thinkingDuration) {
+  // Show completion message for completed messages
+  if (isComplete) {
     return (
       <div className="mb-3">
         <button
@@ -63,7 +50,7 @@ const ThinkingSteps = ({ thinking, isLatest, isComplete }: {
           )}
           <span className="text-lg">🧠</span>
           <span className="text-base">
-            Thought for {thinkingDuration} second{thinkingDuration !== 1 ? 's' : ''}
+            Analysis complete
           </span>
         </button>
         
@@ -313,17 +300,6 @@ export default function Chat() {
                       )}
                     </div>
                   ))}
-
-                  {isLoading && (
-                    <div className="flex justify-start">
-                      <div className="max-w-2xl">
-                        <div className="flex items-center gap-2 text-sm text-gray-500">
-                          <span className="text-lg">🧠</span>
-                          <span>Thinking...</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   {error && (
                     <div className="flex justify-start">
