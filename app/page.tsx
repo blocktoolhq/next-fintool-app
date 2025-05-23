@@ -256,7 +256,7 @@ export default function Chat() {
             height={32}
             className="rounded-lg"
           />
-          <span className="text-xl font-semibold text-gray-900">Fintool</span>
+          <span className="text-xl font-semibold text-gray-900">Fintool API Demo</span>
         </div>
       </div>
 
