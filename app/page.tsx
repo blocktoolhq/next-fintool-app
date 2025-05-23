@@ -32,8 +32,8 @@ const createStreamEvent = (type: StreamEvent['type'], data: any): StreamEvent =>
 const isLatestMessage = (messageId: string, messages: any[]) => 
   messageId === messages[messages.length - 1]?.id;
 
-const isMessageComplete = (message: any, isLoading: boolean) => 
-  !!message.metadata?.session_data || (!isLoading || !isLatestMessage(message.id, []));
+const isMessageComplete = (message: any) => 
+  !!message.metadata?.session_data;
 
 // Shared styles
 const styles = {
@@ -219,7 +219,7 @@ const AssistantMessage = ({
   isLatest: boolean; 
   isLoading: boolean; 
 }) => {
-  const isComplete = isMessageComplete(message, isLoading) || !isLatest;
+  const isComplete = isMessageComplete(message) || !isLatest;
   const hasContent = !!message.content && message.content.trim().length > 0;
 
   return (
