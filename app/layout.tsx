@@ -4,8 +4,8 @@ import { Inter } from 'next/font/google';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'AI SDK - Next.js OpenAI Examples',
-  description: 'Examples of using the AI SDK with Next.js and OpenAI.',
+  title: 'Fintool Chat Demo - AI Financial Research Assistant',
+  description: 'Demo chat application showcasing Fintool\'s AI-powered financial research capabilities. Get instant answers from SEC filings, earnings calls, and financial data.',
 };
 
 export default function RootLayout({

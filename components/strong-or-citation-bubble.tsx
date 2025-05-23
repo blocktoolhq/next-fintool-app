@@ -14,9 +14,16 @@ export const StrongOrCitationBubble: React.FC<PropsWithChildren> = ({
     }
 
     const chunkId = match[1];
+    
+    // Ensure chunkId is a valid string
+    if (!chunkId || typeof chunkId !== 'string' || chunkId.trim() === '') {
+        console.error('Invalid chunkId:', chunkId);
+        return <strong {...props}>{children}</strong>;
+    }
+
     return (
         <CitationBubble
-            searchResultId={chunkId}
+            searchResultId={chunkId.trim()}
         />
     );
 };

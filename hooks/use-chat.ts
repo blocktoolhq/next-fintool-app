@@ -1,17 +1,17 @@
-import { BaseMessage, GeneralChatRequest } from "@/utils/chat-api";
+import { BaseMessage, GeneralChatRequest, StreamingChatResponse } from "@/utils/chat-api";
 import { ChatMessage, IAssistantMessage, IUserMessage, isAssistantMessage, isUserMessage } from "@/utils/message";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { callGeneralChatApi } from "@/utils/chat-api";
 
-function asMessage(id: string, m: Record<string, any>): IAssistantMessage {
+function asMessage(id: string, m: StreamingChatResponse): IAssistantMessage {
   return {
     id,
     role: 'assistant',
-    content: m?.content || '',
+    content: m.content || '',
+    thinking: m.thinking || '',
     metadata: {
-      gptHistory: m?.gpt_history || {},
-      thinking_steps: m?.thinking_steps || [],
+      session_data: m.metadata?.session_data || '',
     }
   }
 }
@@ -61,7 +61,7 @@ export function useChat({ id, initialMessages }: UseChatOptions): UseChatHelpers
     const roundId = nanoid();
 
     try {
-      // Create basic message structure
+      // Create basic message structure according to FinTool API spec
       let requestMessages: BaseMessage[] = withUserMessage
         .map(m => {
           if (isUserMessage(m)) {
@@ -74,7 +74,7 @@ export function useChat({ id, initialMessages }: UseChatOptions): UseChatHelpers
               content: m.content,
               role: 'assistant',
               metadata: {
-                gpt_history: m.metadata.gptHistory,
+                session_data: m.metadata.session_data || '',
               }
             };
           } else {
@@ -95,9 +95,9 @@ export function useChat({ id, initialMessages }: UseChatOptions): UseChatHelpers
         id: roundId,
         role: "assistant",
         content: '',
+        thinking: '',
         metadata: {
-          gptHistory: {},
-          thinking_steps: [],
+          session_data: '',
         }
       };
 
@@ -111,12 +111,20 @@ export function useChat({ id, initialMessages }: UseChatOptions): UseChatHelpers
           'X-Round-ID': roundId,
         },
         abortController: () => abortControllerRef.current!,
-        onUpdate: (newState: Record<string, any>) => {
-          const _newMessage = asMessage(roundId, newState);
+        onUpdate: (newState: Partial<StreamingChatResponse>) => {
+          const _newMessage = asMessage(roundId, {
+            thinking: newState.thinking || '',
+            content: newState.content || '',
+            metadata: newState.metadata,
+          });
           setMessages([
             ...withUserMessage,
             _newMessage,
           ]);
+        },
+        onComplete: () => {
+          // Message is complete when session_data is received
+          setLoading(false);
         },
       });
 
@@ -132,7 +140,6 @@ export function useChat({ id, initialMessages }: UseChatOptions): UseChatHelpers
         console.error('Error in chat:', err);
         setError(err as Error);
       }
-    } finally {
       setLoading(false);
     }
   }, [id]);

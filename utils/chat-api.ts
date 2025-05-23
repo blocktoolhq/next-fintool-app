@@ -1,9 +1,7 @@
-import { StateDelta, applyOperation } from "@/utils/state";
-import { Stream } from "@/utils/streaming";
 import { z } from "zod";
 
 export interface AssistantMessageMetadata {
-  gpt_history: { [key: string]: string; };
+  session_data: string;
 }
 
 export interface BaseMessage {
@@ -17,116 +15,189 @@ export interface GeneralChatRequest {
   stream?: boolean;
 }
 
-type AssistantMessage = {
-  mode: 'chat';
+// FinTool API Response Types
+export interface FinToolMessage {
+  role: 'assistant';
+  thinking?: string;
   content: string;
-  gpt_history: { [key: string]: string };
-  thinking_steps?: { title: string, content: string | null; search_content: { query: string, status: string }[] | null; status: string; }[];
-}
-
-function isAssistantMessage(m: any): m is AssistantMessage {
-  return z.object({
-    mode: z.literal('chat'),
-    content: z.string(),
-    thinking_steps: z.array(z.object({
-      title: z.string(),
-      content: z.string().nullable(),
-      search_content: z.array(z.object({
-        query: z.string(),
-        status: z.string(),
-      })).nullable(),
-      status: z.string(),
-    })).optional(),
-    gpt_history: z.record(z.string()),
-  }).safeParse(m).success;
-}
-
-async function callApi({
-  body,
-  headers,
-  abortController,
-  onUpdate,
-}: {
-  body: string,
-  headers?: HeadersInit;
-  abortController: () => AbortController;
-  onUpdate: (state: Partial<Record<string, any>>) => void;
-}): Promise<Record<string, any>> {
-  let state: Record<string, any> = {};
-  let receivedDone = false;
-
-  const makeRequest = async (): Promise<Record<string, any>> => {
-    const response = await fetch('/api/chat', {
-      body,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers,
-      },
-      signal: abortController().signal,
-    });
-
-    if (!response.ok) {
-      const errStr = await response.text()
-      throw new Error(
-        errStr || 'Failed to fetch the chat response.',
-      );
-    }
-
-    receivedDone = false;
-    const stream = Stream.fromSSEResponse(response, abortController());
-    for await (const chunk of stream) {
-      if (chunk.type === 'state_delta') {
-        const delta: StateDelta = chunk.data;
-        state = applyOperation(state, delta, []);
-        onUpdate(state);
-      } else if (chunk.type === 'error') {
-        if (typeof chunk.data === 'object' && 'status' in chunk.data && 'message' in chunk.data) {
-          if (chunk.data.status === 'Completed') {
-            receivedDone = true;
-          } else if (chunk.data.status !== 'Cancelled') {
-            throw new Error(chunk.data.message);
-          }
-        } else {
-          abortController().abort();
-          throw new Error(chunk.data);
-        }
-      }
-    }
-
-    return state;
+  metadata?: {
+    session_data: string;
   };
+}
 
-  return makeRequest();
+export interface FinToolAPIResponse {
+  id: string;
+  createdAt: string;
+  type: 'message';
+  message: FinToolMessage;
+}
+
+// SSE Event format
+interface SSEEvent {
+  event: string;
+  data: string;
+}
+
+export interface StreamingChatResponse {
+  thinking: string;
+  content: string;
+  metadata?: {
+    session_data: string;
+  };
+}
+
+function parseSSEEvent(line: string): SSEEvent | null {
+  const eventMatch = line.match(/^event:\s*(.+)$/);
+  const dataMatch = line.match(/^data:\s*(.+)$/);
+  
+  if (eventMatch) {
+    return { event: eventMatch[1], data: '' };
+  }
+  if (dataMatch) {
+    return { event: 'data', data: dataMatch[1] };
+  }
+  return null;
+}
+
+function parseFinToolAPIResponse(data: string): FinToolAPIResponse | null {
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    console.error('Failed to parse FinTool API response:', e);
+    return null;
+  }
 }
 
 export async function callGeneralChatApi({
   request,
-  headers,
+  headers = {},
   abortController,
   onUpdate,
+  onComplete,
 }: {
-  request: GeneralChatRequest,
+  request: GeneralChatRequest;
   headers?: HeadersInit;
   abortController: () => AbortController;
-  onUpdate: (state: Partial<AssistantMessage>) => void;
-}): Promise<AssistantMessage> {
-  const state = await callApi({
+  onUpdate: (state: Partial<StreamingChatResponse>) => void;
+  onComplete?: () => void;
+}): Promise<StreamingChatResponse> {
+  const response = await fetch('/api/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers,
+    },
     body: JSON.stringify({
       request,
-      endpoint: 'v1/chat',
+      endpoint: 'v2/chat',
     }),
-    headers,
-    abortController,
-    onUpdate,
+    signal: abortController().signal,
   });
 
-  if (
-    isAssistantMessage(state)
-  ) {
-    return state;
+  if (!response.ok) {
+    const errStr = await response.text();
+    throw new Error(errStr || 'Failed to fetch the chat response.');
+  }
+
+  if (request.stream !== false) {
+    // Handle streaming response
+    return await handleStreamingResponse(response, abortController, onUpdate, onComplete);
   } else {
-    console.error("Invalid assistant message:", state);
-    throw new Error('Invalid assistant message');
+    // Handle non-streaming response
+    const data = await response.json();
+    const parsedResponse = parseFinToolAPIResponse(JSON.stringify(data));
+    if (!parsedResponse) {
+      throw new Error('Invalid API response format');
+    }
+    
+    const result: StreamingChatResponse = {
+      thinking: parsedResponse.message.thinking || '',
+      content: parsedResponse.message.content,
+      metadata: parsedResponse.message.metadata,
+    };
+    
+    onUpdate(result);
+    onComplete?.();
+    return result;
+  }
+}
+
+async function handleStreamingResponse(
+  response: Response,
+  abortController: () => AbortController,
+  onUpdate: (state: Partial<StreamingChatResponse>) => void,
+  onComplete?: () => void
+): Promise<StreamingChatResponse> {
+  if (!response.body) {
+    throw new Error('No response body for streaming');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  
+  let buffer = '';
+  let currentState: StreamingChatResponse = {
+    thinking: '',
+    content: '',
+  };
+  let isComplete = false;
+
+  try {
+    while (!isComplete) {
+      const { done, value } = await reader.read();
+      
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      
+      // Process complete lines
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+      
+      let currentEvent = '';
+      let currentData = '';
+      
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        
+        if (trimmedLine === '') {
+          // Empty line signals end of event
+          if (currentEvent === 'message' && currentData) {
+            const parsedResponse = parseFinToolAPIResponse(currentData);
+            if (parsedResponse) {
+              currentState = {
+                thinking: parsedResponse.message.thinking || currentState.thinking,
+                content: parsedResponse.message.content || currentState.content,
+                metadata: parsedResponse.message.metadata || currentState.metadata,
+              };
+              onUpdate(currentState);
+              
+              // Check if we received session_data - this indicates message completion
+              if (parsedResponse.message.metadata?.session_data) {
+                isComplete = true;
+                onComplete?.();
+                break;
+              }
+            }
+          }
+          currentEvent = '';
+          currentData = '';
+          continue;
+        }
+        
+        const sseEvent = parseSSEEvent(trimmedLine);
+        if (sseEvent) {
+          if (sseEvent.event !== 'data') {
+            currentEvent = sseEvent.event;
+          } else {
+            currentData = sseEvent.data;
+          }
+        }
+      }
+    }
+    
+    return currentState;
+  } finally {
+    reader.releaseLock();
   }
 }
