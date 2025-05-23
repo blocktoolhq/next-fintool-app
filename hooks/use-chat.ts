@@ -122,6 +122,10 @@ export function useChat({ id, initialMessages }: UseChatOptions): UseChatHelpers
             _newMessage,
           ]);
         },
+        onComplete: () => {
+          // Message is complete when session_data is received
+          setLoading(false);
+        },
       });
 
       assistantMessage = asMessage(roundId, state) as IAssistantMessage;
@@ -136,7 +140,6 @@ export function useChat({ id, initialMessages }: UseChatOptions): UseChatHelpers
         console.error('Error in chat:', err);
         setError(err as Error);
       }
-    } finally {
       setLoading(false);
     }
   }, [id]);

@@ -73,11 +73,13 @@ export async function callGeneralChatApi({
   headers = {},
   abortController,
   onUpdate,
+  onComplete,
 }: {
   request: GeneralChatRequest;
   headers?: HeadersInit;
   abortController: () => AbortController;
   onUpdate: (state: Partial<StreamingChatResponse>) => void;
+  onComplete?: () => void;
 }): Promise<StreamingChatResponse> {
   const response = await fetch('/api/chat', {
     method: 'POST',
@@ -99,7 +101,7 @@ export async function callGeneralChatApi({
 
   if (request.stream !== false) {
     // Handle streaming response
-    return await handleStreamingResponse(response, abortController, onUpdate);
+    return await handleStreamingResponse(response, abortController, onUpdate, onComplete);
   } else {
     // Handle non-streaming response
     const data = await response.json();
@@ -115,6 +117,7 @@ export async function callGeneralChatApi({
     };
     
     onUpdate(result);
+    onComplete?.();
     return result;
   }
 }
@@ -122,7 +125,8 @@ export async function callGeneralChatApi({
 async function handleStreamingResponse(
   response: Response,
   abortController: () => AbortController,
-  onUpdate: (state: Partial<StreamingChatResponse>) => void
+  onUpdate: (state: Partial<StreamingChatResponse>) => void,
+  onComplete?: () => void
 ): Promise<StreamingChatResponse> {
   if (!response.body) {
     throw new Error('No response body for streaming');
@@ -136,9 +140,10 @@ async function handleStreamingResponse(
     thinking: '',
     content: '',
   };
+  let isComplete = false;
 
   try {
-    while (true) {
+    while (true && !isComplete) {
       const { done, value } = await reader.read();
       
       if (done) break;
@@ -166,6 +171,13 @@ async function handleStreamingResponse(
                 metadata: parsedResponse.message.metadata || currentState.metadata,
               };
               onUpdate(currentState);
+              
+              // Check if we received session_data - this indicates message completion
+              if (parsedResponse.message.metadata?.session_data) {
+                isComplete = true;
+                onComplete?.();
+                break;
+              }
             }
           }
           currentEvent = '';
@@ -182,6 +194,8 @@ async function handleStreamingResponse(
           }
         }
       }
+      
+      if (isComplete) break;
     }
     
     return currentState;
