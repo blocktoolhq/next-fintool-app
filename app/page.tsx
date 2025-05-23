@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from "react-markdown";
 import { Send, StopCircle, ChevronDown, ChevronRight } from "lucide-react";
 import Image from "next/image";
+import remarkGfm from "remark-gfm";
 
 // Collapsible thinking component
 const ThinkingSteps = ({ thinking, isLatest, isComplete }: { 
@@ -127,7 +128,7 @@ const ChatInputComponent = ({
   isLoading: boolean;
   stop: () => void;
 }) => (
-  <div className="flex flex-col gap-4 rounded-lg border bg-white shadow-[0_0_10px_rgba(0,0,0,0.10)] border-black/10 focus-within:border-gray-400 py-2 px-3 max-w-2xl w-full">
+  <div className="flex flex-col gap-4 rounded-lg border bg-white shadow-[0_0_10px_rgba(0,0,0,0.10)] border-black/10 focus-within:border-gray-400 py-2 px-3 max-w-3xl w-full">
     <div className="w-full">
       <textarea
         ref={textareaRef}
@@ -153,22 +154,22 @@ const ChatInputComponent = ({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="default"
             onClick={stop}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 h-10 w-10 p-0"
           >
-            <StopCircle className="w-4 h-4" />
+            <StopCircle className="w-5 h-5" />
           </Button>
         ) : (
           <Button
             type="submit"
             disabled={!input.trim()}
             variant="ghost"
-            size="sm"
-            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:text-gray-300"
+            size="default"
+            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:text-gray-300 h-10 w-10 p-0"
             onClick={handleSubmit}
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-5 h-5" />
           </Button>
         )}
       </div>
@@ -254,34 +255,34 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* Single consistent layout */}
-      <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-6">
-        {/* Messages area - grows to fill available space */}
-        <div className={`flex-1 flex flex-col ${messages.length === 0 ? 'justify-center' : 'justify-end py-16'}`}>
+      {/* Messages Container - takes remaining space above sticky chatbar */}
+      <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 pb-28">
+        <div className={`flex-1 flex flex-col ${messages.length === 0 ? 'justify-center' : 'justify-start py-8'}`}>
           {messages.length > 0 && (
-            <div className="flex-1 overflow-hidden mb-8">
+            <div className="flex-1 overflow-hidden">
               <ScrollArea className="h-full">
                 <div className="space-y-6 py-4">
                   {messages.map(m => (
                     <div key={m.id}>
                       {m.role === 'user' ? (
                         <div className="flex justify-end">
-                          <div className="bg-blue-50 rounded-lg p-4 max-w-2xl">
+                          <div className="bg-blue-50 rounded-lg p-4 max-w-3xl">
                             <p className="text-gray-900">{m.content}</p>
                           </div>
                         </div>
                       ) : (
                         <div className="flex justify-start">
-                          <div className="max-w-2xl">
+                          <div className="max-w-3xl w-full">
                             {isAssistantMessage(m) && m.thinking && (
                               <ThinkingSteps 
                                 thinking={m.thinking} 
                                 isLatest={m.id === messages[messages.length - 1].id} 
-                                isComplete={!isLoading || m.id !== messages[messages.length - 1].id} 
+                                isComplete={!!m.metadata.session_data || (!isLoading || m.id !== messages[messages.length - 1].id)}
                               />
                             )}
                             <div className="prose prose-sm max-w-none">
                               <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
                                 components={{
                                   strong({ children, ...props }) {
                                     return (
@@ -290,6 +291,27 @@ export default function Chat() {
                                       </StrongOrCitationBubble>
                                     );
                                   },
+                                  p: ({ children }) => <p className="mb-3">{children}</p>,
+                                  ul: ({ children }) => <ul className="mb-3 pl-6">{children}</ul>,
+                                  ol: ({ children }) => <ol className="mb-3 pl-6">{children}</ol>,
+                                  li: ({ children }) => <li className="mb-1">{children}</li>,
+                                  h1: ({ children }) => <h1 className="text-xl font-bold mb-3">{children}</h1>,
+                                  h2: ({ children }) => <h2 className="text-lg font-bold mb-2">{children}</h2>,
+                                  h3: ({ children }) => <h3 className="text-base font-bold mb-2">{children}</h3>,
+                                  table: ({ children }) => (
+                                    <div className="overflow-x-auto mb-3">
+                                      <table className="min-w-full border border-gray-300">{children}</table>
+                                    </div>
+                                  ),
+                                  thead: ({ children }) => <thead>{children}</thead>,
+                                  tbody: ({ children }) => <tbody>{children}</tbody>,
+                                  tr: ({ children }) => <tr>{children}</tr>,
+                                  th: ({ children }) => (
+                                    <th className="border border-gray-300 px-2 py-1 bg-gray-100 font-bold text-left">{children}</th>
+                                  ),
+                                  td: ({ children }) => (
+                                    <td className="border border-gray-300 px-2 py-1">{children}</td>
+                                  ),
                                 }}
                               >
                                 {m.content}
@@ -303,7 +325,7 @@ export default function Chat() {
 
                   {error && (
                     <div className="flex justify-start">
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-w-2xl">
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-w-3xl">
                         <p className="text-red-700 text-sm">An error occurred. Please try again.</p>
                       </div>
                     </div>
@@ -312,19 +334,21 @@ export default function Chat() {
               </ScrollArea>
             </div>
           )}
+        </div>
+      </div>
 
-          {/* Input always at the bottom of its container */}
-          <div className="flex justify-center">
-            <ChatInputComponent 
-              input={input}
-              textareaRef={textareaRef}
-              handleInputChange={handleInputChange}
-              handleKeyDown={handleKeyDown}
-              handleSubmit={handleSubmit}
-              isLoading={isLoading}
-              stop={stop}
-            />
-          </div>
+      {/* Sticky Chat Input */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white px-6 py-4">
+        <div className="max-w-4xl mx-auto w-full flex justify-center">
+          <ChatInputComponent 
+            input={input}
+            textareaRef={textareaRef}
+            handleInputChange={handleInputChange}
+            handleKeyDown={handleKeyDown}
+            handleSubmit={handleSubmit}
+            isLoading={isLoading}
+            stop={stop}
+          />
         </div>
       </div>
     </div>

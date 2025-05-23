@@ -143,7 +143,7 @@ async function handleStreamingResponse(
   let isComplete = false;
 
   try {
-    while (true && !isComplete) {
+    while (!isComplete) {
       const { done, value } = await reader.read();
       
       if (done) break;
@@ -194,8 +194,6 @@ async function handleStreamingResponse(
           }
         }
       }
-      
-      if (isComplete) break;
     }
     
     return currentState;
