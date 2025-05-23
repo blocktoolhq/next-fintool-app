@@ -41,7 +41,7 @@ const ThinkingSteps = ({ thinking, isLatest, isComplete, hasContent }: {
   if (!thinking) return null;
 
   // Determine the display text based on state
-  const displayText = (isComplete || hasContent) ? 'Analysis complete' : 'Thinking';
+  const displayText = (isComplete || hasContent) ? 'Analysis complete' : 'Thinking..';
 
   return (
     <div className="mb-3">
@@ -126,9 +126,9 @@ const ChatInputComponent = ({
             variant="ghost"
             size="default"
             onClick={stop}
-            className="text-gray-400 hover:text-gray-600 h-10 w-10 p-0"
+            className="text-gray-400 hover:text-gray-600 h-12 w-12 p-0"
           >
-            <StopCircle className="w-5 h-5" />
+            <StopCircle className="w-10 h-10" />
           </Button>
         ) : (
           <Button
@@ -136,10 +136,10 @@ const ChatInputComponent = ({
             disabled={!input.trim()}
             variant="ghost"
             size="default"
-            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:text-gray-300 h-10 w-10 p-0"
+            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:text-gray-300 h-12 w-12 p-0"
             onClick={handleSubmit}
           >
-            <Send className="w-5 h-5" />
+            <Send className="w-10 h-10" />
           </Button>
         )}
       </div>

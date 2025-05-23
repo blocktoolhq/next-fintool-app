@@ -8,9 +8,9 @@ export async function GET(
   // Get the ID from the route params
   const { searchResultId } = (await params);
 
-  if (!searchResultId) {
+  if (!searchResultId || searchResultId === '[object Object]') {
     return NextResponse.json(
-      { error: 'Missing required parameter: searchResultId' },
+      { error: 'Invalid searchResultId parameter' },
       { status: 400 }
     );
   }
@@ -31,7 +31,26 @@ export async function GET(
     }
 
     const chunksData = await response.json();
-    return NextResponse.json(chunksData[0]);
+    
+    if (!chunksData || !Array.isArray(chunksData) || chunksData.length === 0) {
+      return NextResponse.json(
+        { error: 'No chunk data found' },
+        { status: 404 }
+      );
+    }
+
+    // Ensure the data is serializable by creating a clean object
+    const chunkData = chunksData[0];
+    const cleanData = {
+      id: chunkData.id || '',
+      text: chunkData.text || '',
+      document_id: chunkData.document_id || '',
+      document_url: chunkData.document_url || '',
+      ticker: chunkData.ticker || '',
+      doc_type: chunkData.doc_type || ''
+    };
+
+    return NextResponse.json(cleanData);
   } catch (error) {
     console.error('Error fetching chunk data:', error);
     return NextResponse.json(
