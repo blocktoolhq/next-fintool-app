@@ -13,17 +13,16 @@ export interface IAssistantMessage {
   id: string;
   content: string;
   role: 'assistant';
+  thinking?: string;
   metadata: {
-    gptHistory: { [key: string]: string };
-    thinking_steps: { title: string, content: string }[];
-  }
+    session_data?: string;
+  };
 }
 
 export function isAssistantMessage(m: any): m is IAssistantMessage {
   return (m?.role === 'assistant') &&
-    (m?.metadata?.gptHistory) &&
-    (m?.metadata?.thinking_steps);
+    (typeof m?.content === 'string') &&
+    (m?.metadata);
 }
-
 
 export type ChatMessage = IUserMessage | IAssistantMessage;

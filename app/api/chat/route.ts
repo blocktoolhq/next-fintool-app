@@ -1,4 +1,3 @@
-import { Stream } from "openai/streaming";
 import { doRequest } from "@/utils/fintool-api";
 
 export const maxDuration = 300;
@@ -21,18 +20,31 @@ async function createChatStream(headers: Record<string, string>, endpoint: strin
     throw new Error(errStr || 'Failed to fetch the chat response.');
   }
 
-  const stream = Stream.fromSSEResponse(response, controller);
-  return stream.toReadableStream();
+  // For streaming responses, pass through the SSE stream directly
+  if (body.stream !== false && response.body) {
+    return response.body;
+  }
+
+  // For non-streaming responses, convert to stream
+  const data = await response.json();
+  const encoder = new TextEncoder();
+  
+  return new ReadableStream({
+    start(controller) {
+      const jsonData = JSON.stringify(data);
+      controller.enqueue(encoder.encode(jsonData));
+      controller.close();
+    }
+  });
 }
 
 export async function POST(req: Request): Promise<Response> {
   const { request, endpoint } = await req.json();
 
-  // Prepare payload for the backend
-  const { use_sharepoint, ...restOfRequest } = request;
+  // Prepare payload for the backend - pass through the exact format expected by FinTool API
   const backendPayload = {
-    ...restOfRequest,
-    ...(use_sharepoint !== undefined && { use_kendra: use_sharepoint }),
+    messages: request.messages,
+    stream: request.stream !== false, // Default to true for streaming
   };
 
   const headersObject: Record<string, string> = {};
@@ -55,7 +67,18 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const stream = await createChatStream(headersObject, endpoint, backendPayload, controller);
-    return new Response(stream);
+    
+    // Return appropriate headers for SSE
+    return new Response(stream, {
+      headers: {
+        'Content-Type': backendPayload.stream ? 'text/plain; charset=utf-8' : 'application/json',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        ...(backendPayload.stream && {
+          'Transfer-Encoding': 'chunked'
+        })
+      }
+    });
   } catch (e) {
     console.error(e);
     return new Response('Failed to fetch the chat response.', { status: 500 });
