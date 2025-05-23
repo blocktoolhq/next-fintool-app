@@ -8,7 +8,7 @@ import { StrongOrCitationBubble } from "@/components/strong-or-citation-bubble";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from "react-markdown";
-import { Send, StopCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { Send, StopCircle, ChevronDown, ChevronRight, Brain } from "lucide-react";
 import Image from "next/image";
 import remarkGfm from "remark-gfm";
 
@@ -22,7 +22,6 @@ const ThinkingSteps = ({ thinking, isLatest, isComplete, hasContent }: {
   const [isExpanded, setIsExpanded] = useState(false);
   
   const steps = thinking.split('\n').filter(Boolean);
-  const latestStep = steps[steps.length - 1]?.trim() || 'Thinking...';
   
   // Auto-expand latest message and collapse when content appears
   useEffect(() => {
@@ -41,44 +40,8 @@ const ThinkingSteps = ({ thinking, isLatest, isComplete, hasContent }: {
   
   if (!thinking) return null;
 
-  // Show completion message for completed messages
-  if (isComplete) {
-    return (
-      <div className="mb-3">
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors w-full text-left"
-        >
-          {isExpanded ? (
-            <ChevronDown className="w-3 h-3 shrink-0" />
-          ) : (
-            <ChevronRight className="w-3 h-3 shrink-0" />
-          )}
-          <span className="text-lg">🧠</span>
-          <span className="text-base">
-            Analysis complete
-          </span>
-        </button>
-        
-        {isExpanded && (
-          <div className="mt-2 ml-5 space-y-1">
-            {steps.map((step, i) => (
-              <div
-                key={`${step}-${i}`}
-                className="text-sm text-gray-400 animate-[fadeSlideIn_0.3s_ease-out] opacity-0"
-                style={{ 
-                  animationDelay: `${i * 0.05}s`,
-                  animationFillMode: 'forwards'
-                }}
-              >
-                {step.trim()}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
+  // Determine the display text based on state
+  const displayText = (isComplete || hasContent) ? 'Analysis complete' : 'Thinking';
 
   return (
     <div className="mb-3">
@@ -91,8 +54,10 @@ const ThinkingSteps = ({ thinking, isLatest, isComplete, hasContent }: {
         ) : (
           <ChevronRight className="w-3 h-3 shrink-0" />
         )}
-        <span className="text-lg">🧠</span>
-        <span className="truncate">{latestStep}</span>
+        <Brain className="w-5 h-5" />
+        <span className="text-base">
+          {displayText}
+        </span>
       </button>
       
       {isExpanded && (
@@ -100,7 +65,7 @@ const ThinkingSteps = ({ thinking, isLatest, isComplete, hasContent }: {
           {steps.map((step, i) => (
             <div
               key={`${step}-${i}`}
-              className="text-xs text-gray-400 animate-[fadeSlideIn_0.3s_ease-out] opacity-0"
+              className="text-sm text-gray-400 animate-[fadeSlideIn_0.3s_ease-out] opacity-0"
               style={{ 
                 animationDelay: `${i * 0.05}s`,
                 animationFillMode: 'forwards'
