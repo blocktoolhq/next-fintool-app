@@ -21,12 +21,12 @@ export default function Chat() {
     initialMessages: [],
   });
 
-  // Find the last assistant message to display thinking steps
+  // Find the last assistant message to display thinking
   const lastAssistantMessage = messages.length > 0
     ? messages[messages.length - 1]
     : null;
 
-  const showThinkingSteps = isLoading && lastAssistantMessage && isAssistantMessage(lastAssistantMessage);
+  const showThinking = isLoading && lastAssistantMessage && isAssistantMessage(lastAssistantMessage);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
@@ -58,15 +58,10 @@ export default function Chat() {
           ) : (
             <>
               <div className="font-medium">AI:</div>
-              {isAssistantMessage(m) && m.metadata.thinking_steps.length > 0 && (
+              {isAssistantMessage(m) && m.thinking && (
                 <div className="space-y-2 my-2 bg-gray-50 p-3 rounded-md">
-                  <div className="font-medium text-sm text-gray-700">Thinking steps:</div>
-                  {m.metadata.thinking_steps.map((step, index) => (
-                    <div key={index} className="pl-3 border-l-2 border-gray-300">
-                      <div className="font-medium text-sm">{step.title}</div>
-                      <div className="text-sm text-gray-600">{step.content}</div>
-                    </div>
-                  ))}
+                  <div className="font-medium text-sm text-gray-700">Thinking:</div>
+                  <div className="text-sm text-gray-600 whitespace-pre-wrap">{m.thinking}</div>
                 </div>
               )}
               <div className="whitespace-pre-wrap">
