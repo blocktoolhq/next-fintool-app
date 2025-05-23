@@ -349,6 +349,32 @@ const JsonPanel = ({
   );
 };
 
+// Sample questions based on Fintool.com examples
+const SAMPLE_QUESTIONS = [
+  "How will AWS backlog growth impact Amazon's valuation?",
+  "How does CapEx impact Microsoft's cloud growth?",
+  "What does META say about CAPEX increase?",
+  "What are the key risks facing NVDA in 2025?"
+];
+
+// Sample question component
+const SampleQuestions = ({ onQuestionClick }: { onQuestionClick: (question: string) => void }) => (
+  <div className="flex flex-col items-center justify-center min-h-[60vh] max-w-3xl mx-auto px-6">
+    <p className="text-sm text-muted-foreground mb-6">Try a sample question</p>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+      {SAMPLE_QUESTIONS.map((question, index) => (
+        <button
+          key={index}
+          onClick={() => onQuestionClick(question)}
+          className="text-left p-6 rounded-lg border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-base leading-relaxed shadow-sm hover:shadow-md"
+        >
+          {question}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 export default function Chat() {
   // Generate a unique conversation ID once when component mounts
   const conversationId = useMemo(() => nanoid(), []);
@@ -412,6 +438,22 @@ export default function Chat() {
     }
   }, [handleSubmit]);
 
+  const handleQuestionClick = useCallback(async (question: string) => {
+    if (isLoading) return;
+
+    await append({
+      id: nanoid(),
+      role: 'user',
+      content: question,
+      metadata: {}
+    });
+
+    // Scroll to bottom after submitting
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  }, [isLoading, append]);
+
   // Auto-resize textarea
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -468,7 +510,9 @@ export default function Chat() {
         {/* Messages Container */}
         <div className={`flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 pb-28 transition-all duration-300 ${showJsonPanel ? 'mr-[32rem]' : ''}`}>
           <div className={`flex-1 flex flex-col ${messages.length === 0 ? 'justify-center' : 'justify-start py-8'}`}>
-            {messages.length > 0 && (
+            {messages.length === 0 ? (
+              <SampleQuestions onQuestionClick={handleQuestionClick} />
+            ) : (
               <div className="flex-1 overflow-hidden">
                 <ScrollArea className="h-full">
                   <div className="space-y-6 py-4">

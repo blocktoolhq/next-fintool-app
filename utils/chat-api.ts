@@ -93,10 +93,7 @@ function createFetchConfig(request: GeneralChatRequest, headers: HeadersInit, si
       'Content-Type': 'application/json',
       ...headers,
     },
-    body: JSON.stringify({
-      request,
-      endpoint: 'v2/chat',
-    }),
+    body: JSON.stringify(request),
     signal,
   };
 }

@@ -54,11 +54,8 @@ function trimMessagesToLastExchanges(messages: BaseMessage[], keepLastNMessages:
 
 function createRequestBody(requestMessages: BaseMessage[]) {
   return {
-    request: {
-      messages: requestMessages,
-      stream: true,
-    },
-    endpoint: 'v2/chat',
+    messages: requestMessages,
+    stream: true,
   };
 }
 
@@ -76,7 +73,7 @@ type UseChatHelpers = {
   messages: ChatMessage[];
   setMessages: (messages: ChatMessage[]) => void;
   error: undefined | Error;
-  append: (userMessage: IUserMessage, keepLastNMessages?: number, useCaching?: boolean) => Promise<void>;
+  append: (userMessage: IUserMessage, keepLastNMessages?: number) => Promise<void>;
   stop: () => void;
   isLoading: boolean;
 };
@@ -105,7 +102,7 @@ export function useChat({ id, initialMessages, onStreamEvent }: UseChatOptions):
     }
   }, []);
 
-  const append = useCallback(async (userMessage: IUserMessage, keepLastNMessages = 3, useCaching = false) => {
+  const append = useCallback(async (userMessage: IUserMessage, keepLastNMessages = 3) => {
     const previousMessages = messagesRef.current;
     const withUserMessage = [...previousMessages, userMessage];
     const roundId = nanoid();
@@ -122,13 +119,15 @@ export function useChat({ id, initialMessages, onStreamEvent }: UseChatOptions):
         keepLastNMessages
       );
 
-      // Log the request for debugging
-      const actualRequestBody = createRequestBody(requestMessages);
+      // Log the exact API request format 
+      const realAPIRequest = createRequestBody(requestMessages);
       onStreamEvent?.('request', {
-        url: '/api/chat',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: actualRequestBody
+        url: 'POST https://api.fintool.com/v2/chat',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer YOUR_API_KEY'
+        },
+        body: realAPIRequest
       });
 
       // Create abort controller

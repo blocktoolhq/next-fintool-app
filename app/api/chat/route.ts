@@ -39,13 +39,7 @@ async function createChatStream(headers: Record<string, string>, endpoint: strin
 
 export async function POST(req: Request): Promise<Response> {
   try {
-    const { request, endpoint } = await req.json();
-
-    // Prepare payload for the backend
-    const backendPayload = {
-      messages: request.messages,
-      stream: request.stream !== false,
-    };
+    const requestBody = await req.json();
 
     const headersObject: Record<string, string> = {};
 
@@ -58,14 +52,14 @@ export async function POST(req: Request): Promise<Response> {
       }
     }
 
-    const stream = await createChatStream(headersObject, endpoint, backendPayload);
+    const stream = await createChatStream(headersObject, 'v2/chat', requestBody);
     
     return new Response(stream, {
       headers: {
-        'Content-Type': backendPayload.stream ? 'text/plain; charset=utf-8' : 'application/json',
+        'Content-Type': requestBody.stream !== false ? 'text/plain; charset=utf-8' : 'application/json',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        ...(backendPayload.stream && {
+        ...(requestBody.stream !== false && {
           'Transfer-Encoding': 'chunked'
         })
       }
