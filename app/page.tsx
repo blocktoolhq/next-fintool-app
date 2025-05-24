@@ -351,10 +351,10 @@ const JsonPanel = ({
 
 // Sample questions based on Fintool.com examples
 const SAMPLE_QUESTIONS = [
-  "How will AWS backlog growth impact Amazon's valuation?",
-  "How does CapEx impact Microsoft's cloud growth?",
-  "What does META say about CAPEX increase?",
-  "What are the key risks facing NVDA in 2025?"
+  "What risks does Apple mention in their latest 10-K filing?",
+  "How has Microsoft's R&D spending changed according to their latest 10-Q?",
+  "What recent acquisitions has Tesla disclosed in latest 8-K filings?",
+  "What does Meta's latest proxy statement say about executive compensation?"
 ];
 
 // Sample question component
