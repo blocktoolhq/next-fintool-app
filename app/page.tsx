@@ -353,8 +353,8 @@ const JsonPanel = ({
 const SAMPLE_QUESTIONS = [
   "What risks does Apple mention in their latest 10-K filing?",
   "How has Microsoft's R&D spending changed according to their latest 10-Q?",
-  "What recent acquisitions has Tesla disclosed in latest 8-K filings?",
-  "What does Meta's latest proxy statement say about executive compensation?"
+  "How has Tesla's EV production changed according to their latest 10-Q?",
+  "What does Amazon's latest 10-K say about AWS segment performance?"
 ];
 
 // Sample question component
